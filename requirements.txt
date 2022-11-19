@@ -1,0 +1,10 @@
+numpy~=1.23.3
+torchvision~=0.13.0
+tqdm~=4.64.1
+nni~=2.9
+tensorboardX~=2.2
+torchmetrics~=0.10.0
+pytorch_lightning~=1.8.1
+seaborn~=0.12.1
+matplotlib~=3.6.0
+pygraphviz~=1.10
