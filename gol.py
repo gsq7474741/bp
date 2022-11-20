@@ -3,11 +3,11 @@ def init():
     _global_dict = {}
 
 
-def set_value(key, value):
+def set_value(key: str, value: ...) -> None:
     _global_dict[key] = value
 
 
-def get_value(key):
+def get_value(key: str) -> ...:
     try:
         return _global_dict[key]
     except KeyError:

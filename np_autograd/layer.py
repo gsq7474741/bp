@@ -1,6 +1,6 @@
 import warnings
 from collections import OrderedDict
-from typing import Union, Iterator, Set, Optional, Dict
+from typing import Union, Iterator, Set, Optional, Dict, Iterable, Tuple
 
 import numpy as np
 
@@ -17,15 +17,15 @@ class Layer:
         self._layers: Dict[str, Optional['Layer']] = OrderedDict()
         self._name: str = name
 
-    def forward(self, *inputs):
+    def forward(self, *inputs) -> Tensor:
         raise NotImplementedError
 
     def train(self, mode: bool = True):
         if not isinstance(mode, bool):
             raise ValueError("training mode is expected to be boolean")
         self.training = mode
-        for module in self.children():
-            module.train(mode)
+        for layer in self.children():
+            layer.train(mode)
         return self
 
     def eval(self):
@@ -33,7 +33,7 @@ class Layer:
 
     def register_parameter(self, name: str, param: Optional[Parameter]) -> None:
         r"""
-        Adds a parameter to the module.
+        Adds a parameter to the layer.
         """
         if '_parameters' not in self.__dict__:
             raise AttributeError(
@@ -57,13 +57,13 @@ class Layer:
         else:
             self._parameters[name] = param
 
-    def register_buffer(self, name: str, tensor: Optional[Tensor], persistent: bool = True) -> None:
+    def register_buffer(self, name: str, tensor: Optional[Tensor]) -> None:
         r"""
-        Adds a buffer to the module, a buffer that should not to be considered a model parameter.
+        Adds a buffer to the layer, a buffer that should not to be considered a model parameter.
         """
         if '_buffers' not in self.__dict__:
             raise AttributeError(
-                "cannot assign buffer before Module.__init__() call")
+                "cannot assign buffer before Layer.__init__() call")
         elif not isinstance(name, str):
             raise TypeError("buffer name should be a string. "
                             "Got {}".format(type(name)))
@@ -80,26 +80,22 @@ class Layer:
         else:
             self._buffers[name] = tensor
 
-    def register_module(self, name: str, module: Optional['Layer']) -> None:
-        r"""Alias for :func:`add_module`."""
-        self.add_module(name, module)
-
     def _named_members(self, get_members_fn, prefix='', recurse=True):
-        r"""Helper method for yielding various names + members of modules."""
+        r"""Helper method for yielding various names + members of layers."""
         memo = set()
-        modules = self.named_modules(prefix=prefix) if recurse else [(prefix, self)]
-        for module_prefix, module in modules:
-            members = get_members_fn(module)
+        layers = self.named_layers(prefix=prefix) if recurse else [(prefix, self)]
+        for layer_prefix, layer in layers:
+            members = get_members_fn(layer)
             for k, v in members:
                 if v is None or v in memo:
                     continue
                 memo.add(v)
-                name = module_prefix + ('.' if module_prefix else '') + k
+                name = layer_prefix + ('.' if layer_prefix else '') + k
                 yield name, v
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
         gen = self._named_members(
-            lambda module: module._parameters.items(),
+            lambda layer: layer._parameters.items(),
             prefix='', recurse=recurse)
 
         for name, param in gen:
@@ -107,40 +103,40 @@ class Layer:
 
     def buffers(self, recurse: bool = True) -> Iterator[Tensor]:
         r"""
-        Returns an iterator over module buffers.
+        Returns an iterator over layer buffers.
         """
 
         gen = self._named_members(
-            lambda module: module._buffers.items(),
+            lambda layer: layer._buffers.items(),
             prefix='', recurse=recurse)
         for _, buf in gen:
             yield buf
 
     def children(self) -> Iterator['Layer']:
         r"""
-        Returns an iterator over immediate children modules.
+        Returns an iterator over immediate children layers.
         """
         memo = set()
-        for name, module in self._layers.items():
-            if module is not None and module not in memo:
-                memo.add(module)
-                yield module
+        for name, layer in self._layers.items():
+            if layer is not None and layer not in memo:
+                memo.add(layer)
+                yield layer
 
-    def named_modules(self, memo: Optional[Set['Layer']] = None, prefix: str = '', remove_duplicate: bool = True):
-        r"""Returns an iterator over all modules in the network, yielding
-        both the name of the module as well as the module itself.
+    def named_layers(self, memo: Optional[Set['Layer']] = None, prefix: str = '', remove_duplicate: bool = True):
+        r"""Returns an iterator over all layers in the network, yielding
+        both the name of the layer as well as the layer itself.
 
         Args:
-            memo: a memo to store the set of modules already added to the result
-            prefix: a prefix that will be added to the name of the module
-            remove_duplicate: whether to remove the duplicated module instances in the result
+            memo: a memo to store the set of layers already added to the result
+            prefix: a prefix that will be added to the name of the layer
+            remove_duplicate: whether to remove the duplicated layer instances in the result
                 or not
 
         Yields:
-            (string, Module): Tuple of name and module
+            (string, Layer): Tuple of name and layer
 
         Note:
-            Duplicate modules are returned only once. In the following
+            Duplicate layers are returned only once. In the following
             example, ``l`` will be returned only once.
 
         """
@@ -151,11 +147,11 @@ class Layer:
             if remove_duplicate:
                 memo.add(self)
             yield prefix, self
-            for name, module in self._layers.items():
-                if module is None:
+            for name, layer in self._layers.items():
+                if layer is None:
                     continue
-                submodule_prefix = prefix + ('.' if prefix else '') + name
-                for m in module.named_modules(memo, submodule_prefix, remove_duplicate):
+                sublayer_prefix = prefix + ('.' if prefix else '') + name
+                for m in layer.named_layers(memo, sublayer_prefix, remove_duplicate):
                     yield m
 
     def zero_grad(self, set_to_none: bool = False) -> None:
@@ -164,8 +160,8 @@ class Layer:
         """
         if getattr(self, '_is_replica', False):
             warnings.warn(
-                "Calling .zero_grad() from a module created with nn.DataParallel() has no effect. "
-                "The parameters are copied (in a differentiable manner) from the original module. "
+                "Calling .zero_grad() from a layer created with nn.DataParallel() has no effect. "
+                "The parameters are copied (in a differentiable manner) from the original layer. "
                 "This means they are not leaf nodes in autograd and so don't accumulate gradients. "
                 "If you need gradients in your forward method, consider using autograd.grad instead.")
 
@@ -207,12 +203,12 @@ class Layer:
             if isinstance(value, Layer):
                 if layers is None:
                     raise AttributeError(
-                        "cannot assign module before Module.__init__() call")
+                        "cannot assign layer before Layer.__init__() call")
                 remove_from(self.__dict__, self._parameters, self._buffers)
                 layers[name] = value
             elif layers is not None and name in layers:
                 if value is not None:
-                    raise TypeError("cannot assign '{}' as child module '{}' "
+                    raise TypeError("cannot assign '{}' as child layer '{}' "
                                     "(Layer or None expected)"
                                     .format(type(value), name))
                 layers[name] = value
@@ -237,9 +233,9 @@ class Layer:
             if name in _buffers:
                 return _buffers[name]
         if '_layers' in self.__dict__:
-            modules = self.__dict__['_layers']
-            if name in modules:
-                return modules[name]
+            layers = self.__dict__['_layers']
+            if name in layers:
+                return layers[name]
         raise AttributeError("'{}' object has no attribute '{}'".format(
             type(self).__name__, name))
 
@@ -280,7 +276,7 @@ class Layer:
 
         main_str = self.__class__.__name__ + '('
         if lines:
-            # simple one-liner info, which most builtin Modules will use
+            # simple one-liner info, which most builtin Layers will use
             if len(extra_lines) == 1 and not child_lines:
                 main_str += extra_lines[0]
             else:
@@ -332,19 +328,40 @@ class ReLU(Layer):
     def __init__(self):
         super().__init__()
 
-    def forward(self, inputs):
+    def forward(self, inputs: Tensor) -> Tensor:
         return t.ReLU().forward(inputs)
 
     def __repr__(self):
         return "ReLU()"
 
 
+class LeakyReLU(Layer):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs: Tensor) -> Tensor:
+        return t.ReLU().forward(inputs)
+
+    def __repr__(self):
+        return "LeakyReLU()"
+
+class Tanh(Layer):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs: Tensor) -> Tensor:
+        return t.Tanh().forward(inputs)
+
+    def __repr__(self):
+        return "Tanh()"
+
+
 class Dropout(Layer):
-    def __init__(self, p=0.5):
+    def __init__(self, p: float = 0.5):
         super().__init__()
         self.p = p
 
-    def forward(self, inputs):
+    def forward(self, inputs: Tensor) -> Tensor:
         if self.training:
             # mask = np.random.binomial(1, self.p, size=inputs.shape)
             return t.Dropout(self.p).forward(inputs)
@@ -358,7 +375,7 @@ class Softmax(Layer):
     def __init__(self):
         super().__init__()
 
-    def forward(self, inputs, dim=1):
+    def forward(self, inputs: Tensor, dim: Union[None, int, Iterable | Tuple[int]] = -1) -> Tensor:
         return t.Softmax().forward(inputs, dim)
 
 
@@ -366,7 +383,7 @@ class Sigmoid(Layer):
     def __init__(self):
         super().__init__()
 
-    def forward(self, inputs):
+    def forward(self, inputs: Tensor) -> Tensor:
         return t.Sigmoid().forward(inputs)
 
     def __repr__(self):

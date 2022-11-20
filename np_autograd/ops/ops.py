@@ -1,14 +1,14 @@
 from abc import abstractmethod
-
-from np_autograd.tensor import Tensor, Parameter
-import numpy as np
-import torch
-
 from functools import wraps
 from inspect import getattr_static
 
+import numpy as np
+import torch
 
-def method_register(cls):
+from np_autograd.tensor import Tensor
+
+
+def method_register(cls: object):
     def decorator(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -25,22 +25,22 @@ def method_register(cls):
 
 
 @method_register(Tensor)
-def __add__(self, other):
+def __add__(self: Tensor, other: Tensor) -> Tensor:
     return Add().forward(self, other)
 
 
 @method_register(Tensor)
-def __neg__(self):
+def __neg__(self: Tensor) -> Tensor:
     return Neg().forward(self)
 
 
 @method_register(Tensor)
-def __sub__(self, other):
+def __sub__(self: Tensor, other: Tensor) -> Tensor:
     return Sub().forward(self, other)
 
 
 @method_register(Tensor)
-def __mul__(self, other):
+def __mul__(self: Tensor, other: Tensor) -> Tensor:
     return Mul().forward(self, other)
 
 
@@ -50,17 +50,17 @@ class OpBase:
         # OP_DICT[id(self)] = self
 
     @abstractmethod
-    def forward(self, *args):
+    def forward(self, *args) -> Tensor:
         pass
 
     @abstractmethod
-    def backward(self, dout, out):
+    def backward(self, dout: Tensor, out: Tensor) -> ...:
         pass
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__class__.__name__
 
-    def __call__(self, *args):
+    def __call__(self, *args) -> Tensor:
         return self.forward(*args)
 
 
@@ -70,7 +70,7 @@ class UnaryOpBase(OpBase):
         self.x = None
 
     @abstractmethod
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         pass
 
 
@@ -81,13 +81,13 @@ class BinaryOpBase(OpBase):
         self.y = None
 
     @abstractmethod
-    def forward(self, x, y):
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
         pass
 
 
 class Add(BinaryOpBase):
 
-    def forward(self, x, y):
+    def forward(self, x: Tensor, y: Tensor):
         self.x = x
         self.y = y
 
@@ -363,6 +363,31 @@ class ReLU(UnaryOpBase):
         self.x.backward(dx, out)
 
 
+class LeakyReLU(UnaryOpBase):
+    def __init__(self, alpha=0.01):
+        super().__init__()
+        self.x = None
+        self.alpha = alpha
+
+    def forward(self, x):
+        self.x = x
+        f1 = np.maximum(0, x.data)
+        f2 = self.alpha * (x.data - np.abs(x.data)) * 0.5
+
+        if x.requires_grad is True:
+            return Tensor(f1 + f2,
+                          requires_grad=True,
+                          creators=[x],
+                          creation_op=self)
+        return Tensor(f1 + f2)
+
+    def backward(self, dout, out):
+        dx = np.ones_like(out.data)
+        dx[out.data < 0] = self.alpha
+        dx = Tensor(dx, )
+        self.x.backward(dx, out)
+
+
 class Dropout(UnaryOpBase):
     def __init__(self, p=0.2):
         super().__init__()
@@ -372,13 +397,13 @@ class Dropout(UnaryOpBase):
 
     def forward(self, x):
         self.x = x
+        self.mask = np.random.binomial(1, self.p, size=x.data.shape)
         if x.requires_grad is True:
-            self.mask = np.random.binomial(1, self.p, size=x.data.shape)
             return Tensor(x.data * self.mask,
                           requires_grad=True,
                           creators=[x],
                           creation_op=self)
-        return Tensor(x.data)
+        return Tensor(x.data * self.mask)
 
     def backward(self, dout, out):
         dx = Tensor(dout.data * self.mask, )
@@ -390,22 +415,44 @@ class Softmax(UnaryOpBase):
         super().__init__()
         self.x = None
 
-    def forward(self, x, dim=0):
+    def forward(self, x, dim=-1):
         self.x = x
+        self.dim = dim
 
         def softmax(x):
-            return np.exp(x) / np.sum(np.exp(x), axis=-1)
+            # x.data-np.max(x.data)
+            return np.exp(x.data - np.max(x.data)) / np.expand_dims(np.exp(x.data - np.max(x.data)).sum(axis=dim),
+                                                                    axis=dim)
 
         if x.requires_grad is True:
             # np.exp(x.data) / np.exp(x.data).sum(axis=-1)
-            return Tensor(np.exp(x.data) / np.expand_dims(np.exp(x.data).sum(axis=-1), axis=-1),
+            return Tensor(softmax(x),
                           requires_grad=True,
                           creators=[x],
                           creation_op=self)
-        return Tensor(np.exp(x.data) / np.exp(x.data).sum())
+        return Tensor(softmax(x))
 
     def backward(self, dout, out):
-        dx = Tensor(out.data * (1 - out.data), )
+        dx = Tensor((dout.data - np.expand_dims((out.data * dout.data).sum(axis=self.dim), axis=self.dim)) * out.data, )
+        self.x.backward(dx, out)
+
+
+class Log(UnaryOpBase):
+    def __init__(self):
+        super().__init__()
+        self.x = None
+
+    def forward(self, x):
+        self.x = x
+        if x.requires_grad is True:
+            return Tensor(np.log(x.data),
+                          requires_grad=True,
+                          creators=[x],
+                          creation_op=self)
+        return Tensor(np.log(x.data))
+
+    def backward(self, dout, out):
+        dx = Tensor(1 / self.x.data * dout.data, )
         self.x.backward(dx, out)
 
 
@@ -463,22 +510,3 @@ class CrossEntropy(BinaryOpBase):
         dx_torch = self.x_torch.grad.numpy()
 
         self.x.backward(dx_torch, out)
-
-
-class Log(UnaryOpBase):
-    def __init__(self):
-        super().__init__()
-        self.x = None
-
-    def forward(self, x):
-        self.x = x
-        if x.requires_grad is True:
-            return Tensor(np.log(x.data),
-                          requires_grad=True,
-                          creators=[x],
-                          creation_op=self)
-        return Tensor(np.log(x.data))
-
-    def backward(self, dout, out):
-        dx = Tensor(1 / self.x.data * dout.data, )
-        self.x.backward(dx, out)

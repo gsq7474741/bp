@@ -21,7 +21,7 @@ class Optimizer:
 
 
 class SGD(Optimizer):
-    def __init__(self, paras, params: List[Parameter], lr=0.01, momentum=0):
+    def __init__(self, params, lr=0.01, momentum: float = 0):
         super().__init__(params, lr)
         self.momentum: float = momentum
 
@@ -46,7 +46,7 @@ class SGD(Optimizer):
 
 
 class Adam(Optimizer):
-    def __init__(self, params: List[Parameter], lr=0.001, b1=0.9, b2=0.999):
+    def __init__(self, params: List[Parameter], lr=0.001, b1: float = 0.9, b2: float = 0.999):
         super().__init__(params, lr)
         self.eps: float = 1e-8
         # Decay rates

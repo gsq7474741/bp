@@ -171,6 +171,38 @@ class TestTensor(TestCase):
         self.assertTrue(np.allclose(torch_x_grad, x_grad))
         # self.assertTrue(np.allclose(torch_y_grad, y_grad))
 
+
+    def test_leakyrelu_backward_0(self):
+        np.random.seed(42)
+        torch.manual_seed(42)
+
+        np_x = np.random.rand(3, 5)
+        # np_y = np.random.rand(5, 7)
+
+        x = Tensor(np_x, requires_grad=True)
+        # y = Tensor(np_y, requires_grad=True)
+
+        torch_x = torch.tensor(np_x, requires_grad=True)
+        # torch_y = torch.tensor(np_y, requires_grad=True)
+
+        op = anp.ops.LeakyReLU()
+        # torch_op = torch.matmul
+        res = op(x)
+        torch_res = torch.nn.functional.leaky_relu(torch_x)
+
+        self.assertTrue(np.allclose(res.data, torch_res.data.numpy()))
+
+        torch_res.backward(torch.ones_like(torch_res))
+        res.backward(np.ones_like(res.data))
+
+        torch_x_grad = torch_x.grad.data.numpy()
+        # torch_y_grad = torch_y.grad.data.numpy()
+        x_grad = x.grad.data
+        # y_grad = y.grad.data
+
+        self.assertTrue(np.allclose(torch_x_grad, x_grad))
+        # self.assertTrue(np.allclose(torch_y_grad, y_grad))
+
     def test_sigmoid_backward_0(self):
         np.random.seed(42)
         torch.manual_seed(42)
@@ -188,6 +220,37 @@ class TestTensor(TestCase):
         # torch_op = torch.matmul
         res = op(x)
         torch_res = torch.sigmoid(torch_x)
+
+        self.assertTrue(np.allclose(res.data, torch_res.data.numpy()))
+
+        torch_res.backward(torch.ones_like(torch_res))
+        res.backward(np.ones_like(res.data))
+
+        torch_x_grad = torch_x.grad.data.numpy()
+        # torch_y_grad = torch_y.grad.data.numpy()
+        x_grad = x.grad.data
+        # y_grad = y.grad.data
+
+        self.assertTrue(np.allclose(torch_x_grad, x_grad))
+        # self.assertTrue(np.allclose(torch_y_grad, y_grad))
+
+    def test_softmax_backward_0(self):
+        np.random.seed(42)
+        torch.manual_seed(42)
+
+        np_x = np.random.rand(3, 5)
+        # np_y = np.random.rand(5, 7)
+
+        x = Tensor(np_x, requires_grad=True)
+        # y = Tensor(np_y, requires_grad=True)
+
+        torch_x = torch.tensor(np_x, requires_grad=True)
+        # torch_y = torch.tensor(np_y, requires_grad=True)
+
+        op = anp.ops.Softmax()
+        dim = -1
+        res = op.forward(x, dim=dim)
+        torch_res = torch.softmax(torch_x, dim=dim)
 
         self.assertTrue(np.allclose(res.data, torch_res.data.numpy()))
 

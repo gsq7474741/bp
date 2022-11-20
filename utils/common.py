@@ -1,14 +1,16 @@
+from typing import Union
+
+import numpy as np
+
+
 class AverageMeter(object):
     def __init__(self):
-        self.reset()
+        self.val: float = 0.
+        self.avg: float = 0.
+        self.sum: float = 0.
+        self.count: int = 0
 
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
+    def update(self, val: Union[int, float, np.ndarray], n: int = 1) -> None:
         self.val = val
         self.sum += val * n
         self.count += n
@@ -24,7 +26,7 @@ class ListAverageMeter(object):
 
     def reset(self):
         self.val = [0] * self.len
-        self.avg = [0] * self.len
+        self.avg: list = [0] * self.len
         self.sum = [0] * self.len
         self.count = 0
 
