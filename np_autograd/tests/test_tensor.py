@@ -29,7 +29,7 @@ gol.set_value('G', G)
 gol.set_value('TENSOR_DICT', TENSOR_DICT)
 gol.set_value('PARA_DICT', PARA_DICT)
 gol.set_value('OP_DICT', OP_DICT)
-gol.set_value('GRAPH_FLAG', False)
+gol.set_value('GRAPH_FLAG', True)
 
 from np_autograd.tensor import Tensor
 import np_autograd as anp
@@ -43,10 +43,6 @@ class TestTensor(TestCase):
         self.assertEqual(x.shape, (4,))
         self.assertEqual(x.requires_grad, False)
         print(x)
-
-    def setUp(self):
-        np.random.seed(42)
-        torch.manual_seed(42)
 
     def test_tensor_backward_2(self):
         a = Tensor([1, 2, 3, 4, 5], requires_grad=True)
@@ -79,6 +75,8 @@ class TestTensor(TestCase):
         print("Tensor b's grad is: {}".format(b.grad))
         print("Tensor c's grad is: {}".format(c.grad))
         print("Tensor d's grad is: {}".format(d.grad))
+        G.layout()
+        G.draw('test_tensor_backward_1.png')
 
     def test_ce_backward_0(self):
         np.random.seed(42)
@@ -170,7 +168,6 @@ class TestTensor(TestCase):
 
         self.assertTrue(np.allclose(torch_x_grad, x_grad))
         # self.assertTrue(np.allclose(torch_y_grad, y_grad))
-
 
     def test_leakyrelu_backward_0(self):
         np.random.seed(42)

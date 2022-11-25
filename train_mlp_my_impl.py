@@ -114,7 +114,7 @@ def valid(val_loader:DataLoader, network: anp.Layer) -> float:
 if __name__ == '__main__':
     # 定义超参数
     epochs = 100
-    batch_size = 1024
+    batch_size = 512
     train_size = 1024
     test_size = 256
     lr = 0.001
@@ -150,7 +150,7 @@ if __name__ == '__main__':
     optimizer = anp.Adam(list(model.parameters()), lr=lr)
 
     # 定义训练过程
-    writer = SummaryWriter(log_dir=f'logs/my_impl/sgd_bs_{batch_size}_lr_{lr}')
+    writer = SummaryWriter(log_dir=f'logs/my_impl/adam_bs_{batch_size}_lr_{lr}')
     best_acc = 0.
     for epoch in trange(epochs):
         # 训练

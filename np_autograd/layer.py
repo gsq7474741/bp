@@ -18,6 +18,9 @@ class Layer:
         self._name: str = name
 
     def forward(self, *inputs) -> Tensor:
+        r"""
+        Forward propagation. Should be implemented by subclasses.
+        """
         raise NotImplementedError
 
     def train(self, mode: bool = True):
@@ -94,6 +97,9 @@ class Layer:
                 yield name, v
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
+        r"""
+        Returns an iterator over layer parameters.
+        """
         gen = self._named_members(
             lambda layer: layer._parameters.items(),
             prefix='', recurse=recurse)
@@ -167,14 +173,7 @@ class Layer:
 
         for p in self.parameters():
             if p.grad is not None:
-                if set_to_none:
-                    p.grad = None
-                else:
-                    if p.grad.grad_fn is not None:
-                        p.grad.detach_()
-                    else:
-                        p.grad.requires_grad_(False)
-                    p.grad.zero_()
+                p.grad.data *= 0
 
     def __setattr__(self, name: str, value: Union[Tensor, 'Layer']) -> None:
         def remove_from(*dicts_or_sets):
@@ -336,14 +335,16 @@ class ReLU(Layer):
 
 
 class LeakyReLU(Layer):
-    def __init__(self):
+    def __init__(self, alpha: float = 0.01):
         super().__init__()
+        self.alpha = alpha
 
     def forward(self, inputs: Tensor) -> Tensor:
-        return t.ReLU().forward(inputs)
+        return t.LeakyReLU(self.alpha).forward(inputs)
 
     def __repr__(self):
         return "LeakyReLU()"
+
 
 class Tanh(Layer):
     def __init__(self):
